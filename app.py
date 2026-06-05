@@ -6,7 +6,7 @@ Expected input Excel sheets:
 - "Metadata": contains Mice number, Group, Gender, Backgound, Date, Sample name
 
 Run:
-    streamlit run streamlit_metabolomics_dashboard_v2.py
+    app.py
 """
 
 from __future__ import annotations
@@ -503,8 +503,8 @@ def recovery_table(long_df: pd.DataFrame, log_transform: bool = True) -> pd.Data
 # Sidebar and data setup
 # -----------------------------
 
-st.title("Mouse untargeted metabolomics dashboard — v6 fixed box points")
-st.info("v4 fixed dots: volcano/differential analysis, PCA loadings, metabolite class explorer, correlation explorer, and antibiotic recovery are included. Antibiotics order is fixed as SPF Before Abx → SPF Abx → SPF After Abx.")
+st.title("Mouse untargeted metabolomics dashboard")
+st.info("Interactive dashboard for mouse untargeted metabolomics: PCA, heatmap, volcano analysis, metabolite classes, correlations, and antibiotic recovery.")
 
 uploaded = st.sidebar.file_uploader(
     "Upload metabolomics Excel file",
