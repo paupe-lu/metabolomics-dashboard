@@ -8,4 +8,4 @@ Streamlit dashboard for exploring untargeted metabolomics data from mouse experi
 conda create -n metabolomics_dashboard python=3.10
 conda activate metabolomics_dashboard
 pip install -r requirements.txt
-streamlit run streamlit_metabolomics_dashboard_v6_fixed_box_points.py
+streamlit run app.py
