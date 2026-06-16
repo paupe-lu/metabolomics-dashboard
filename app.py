@@ -1,8 +1,9 @@
 """
-Streamlit dashboard for mouse untargeted metabolomics.
+Streamlit dashboard for mouse metabolomics.
 
 Expected input Excel sheets:
-- "Normalized results": first column = metabolite names, remaining columns = samples
+- One metabolomics table with first column = metabolite names, remaining columns = samples.
+  Supported sheet names: "Normalized results", "NR_untargeted", "NR_PAA_2HB"
 - "Metadata": contains Mice number, Group, Gender, Backgound, Date, Sample name
 
 Run:
@@ -26,7 +27,7 @@ from statsmodels.stats.multitest import multipletests
 
 
 st.set_page_config(
-    page_title="Mouse untargeted metabolomics dashboard",
+    page_title="Mouse metabolomics dashboard",
     layout="wide",
 )
 
@@ -43,6 +44,7 @@ ABX_ORDER = ["SPF Before Abx", "SPF Abx", "SPF After Abx"]
 EXPERIMENT_ORDER = ["GF vs SPF", "Antibiotics experiment"]
 
 CLASS_ORDER = [
+    "Targeted polyamines",
     "Amino acids and derivatives",
     "Tryptophan, indoles and kynurenine pathway",
     "Purines and purine nucleotides",
@@ -122,11 +124,32 @@ def add_white_points_on_boxes(
 # -----------------------------
 
 @st.cache_data
-def load_workbook(uploaded_file) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Load metabolomics and metadata sheets from the uploaded Excel file."""
-    met = pd.read_excel(uploaded_file, sheet_name="Normalized results")
-    meta = pd.read_excel(uploaded_file, sheet_name="Metadata")
-    return met, meta
+def load_workbook(uploaded_file) -> tuple[dict[str, pd.DataFrame], pd.DataFrame]:
+    """Load supported metabolomics measurement tables and metadata."""
+    xls = pd.ExcelFile(uploaded_file)
+    sheet_names = set(xls.sheet_names)
+
+    if "Metadata" not in sheet_names:
+        raise ValueError("The workbook must contain a 'Metadata' sheet.")
+
+    meta = pd.read_excel(xls, sheet_name="Metadata")
+
+    supported_sheets = {
+        "Normalized results": "Untargeted metabolomics",
+        "NR_untargeted": "Untargeted metabolomics",
+        "NR_PAA_2HB": "Targeted PAA / 2-HB",
+    }
+    datasets = {
+        label: pd.read_excel(xls, sheet_name=sheet)
+        for sheet, label in supported_sheets.items()
+        if sheet in sheet_names
+    }
+
+    if not datasets:
+        supported = ", ".join(supported_sheets)
+        raise ValueError(f"No supported metabolomics sheet found. Expected one of: {supported}.")
+
+    return datasets, meta
 
 
 def normalize_group_name(value: object) -> str:
@@ -197,6 +220,12 @@ def classify_metabolite(name: object) -> str:
         return "Other / unclassified"
 
     x = str(name).lower()
+
+    targeted_polyamine_terms = [
+        "diaminopropane", "putrescine", "cadaverine", "spermidine", "spermine",
+    ]
+    if any(term in x for term in targeted_polyamine_terms):
+        return "Targeted polyamines"
 
     amino_terms = [
         "alanine", "arginine", "asparagine", "aspartic", "cystathionine", "cystine",
@@ -503,26 +532,36 @@ def recovery_table(long_df: pd.DataFrame, log_transform: bool = True) -> pd.Data
 # Sidebar and data setup
 # -----------------------------
 
-st.title("Mouse untargeted metabolomics dashboard")
-st.info("Interactive dashboard for mouse untargeted metabolomics: PCA, heatmap, volcano analysis, metabolite classes, correlations, and antibiotic recovery.")
+st.title("Mouse metabolomics dashboard")
+st.info("Interactive dashboard for mouse metabolomics: untargeted profiles, targeted PAA / 2-HB measurements, PCA, heatmap, volcano analysis, metabolite classes, correlations, and antibiotic recovery.")
 
 uploaded = st.sidebar.file_uploader(
     "Upload metabolomics Excel file",
     type=["xlsx"],
 )
 
-default_path = Path("untargeted_GF_SPF_background.xlsx")
+default_path = Path("untargeted_PAA_2HB_GF_SPF_background.xlsx")
 
 if uploaded is None and default_path.exists():
     uploaded_source = default_path
-    st.sidebar.info("Using local file: untargeted_GF_SPF_background.xlsx")
+    st.sidebar.info(f"Using local file: {default_path.name}")
 elif uploaded is not None:
     uploaded_source = uploaded
 else:
     st.warning("Upload the Excel file to start.")
     st.stop()
 
-met, meta = load_workbook(uploaded_source)
+try:
+    datasets, meta = load_workbook(uploaded_source)
+except ValueError as exc:
+    st.error(str(exc))
+    st.stop()
+
+dataset_name = st.sidebar.selectbox(
+    "Measurement table",
+    options=list(datasets.keys()),
+)
+met = datasets[dataset_name]
 sample_map = build_sample_map(met, meta)
 long_df = make_long_data(met, sample_map)
 
@@ -566,7 +605,7 @@ col1, col2, col3, col4 = st.columns(4)
 col1.metric("Metabolites", n_metabolites)
 col2.metric("Samples", n_samples)
 col3.metric("Matched samples", n_matched)
-col4.metric("Metabolite classes", n_classes)
+col4.metric("Classes", n_classes)
 
 
 # -----------------------------
@@ -590,6 +629,9 @@ tab_overview, tab_explorer, tab_pca, tab_heatmap, tab_diff, tab_class, tab_corr,
 
 
 with tab_overview:
+    st.subheader("Measurement table")
+    st.write(dataset_name)
+
     st.subheader("Detected sample mapping")
     st.caption("Samples are matched by mouse number and detected biological group. Group order is fixed biologically, especially for antibiotics.")
 
